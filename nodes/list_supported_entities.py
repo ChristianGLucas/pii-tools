@@ -19,6 +19,8 @@ def list_supported_entities(ax: AxiomContext, input: ListSupportedEntitiesReques
         entities = _pii.supported_entities(input.category or None)
     except _pii.PiiError as e:
         return ListSupportedEntitiesResponse(error=str(e))
+    except Exception as e:  # noqa: BLE001 — never crash on malformed input
+        return ListSupportedEntitiesResponse(error=f"list failed: {e}")
 
     return ListSupportedEntitiesResponse(
         entities=[

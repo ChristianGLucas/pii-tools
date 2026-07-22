@@ -152,10 +152,12 @@ def _best_overlapping(raw_results, entity_type, start, end):
 def _to_anon_results(entities):
     if not entities:
         raise PiiError("entities must be non-empty")
+    # Respect the caller's score exactly as given — including an explicit
+    # 0.0 — since it decides which entity wins when two spans of different
+    # types overlap (see PiiEntity.score docs). A silent fallback here would
+    # invert a caller's intentional "deprioritize this one" score=0.0.
     return [
-        AnonRecognizerResult(
-            entity_type=e.entity_type, start=e.start, end=e.end, score=e.score or 1.0
-        )
+        AnonRecognizerResult(entity_type=e.entity_type, start=e.start, end=e.end, score=e.score)
         for e in entities
     ]
 

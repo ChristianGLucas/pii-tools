@@ -24,6 +24,8 @@ def detect_pii(ax: AxiomContext, input: DetectPiiRequest) -> DetectPiiResponse:
         entities = _pii.detect(input.text, list(input.entity_types))
     except _pii.PiiError as e:
         return DetectPiiResponse(error=str(e))
+    except Exception as e:  # noqa: BLE001 — never crash on malformed input
+        return DetectPiiResponse(error=f"detection failed: {e}")
 
     return DetectPiiResponse(
         text=input.text,

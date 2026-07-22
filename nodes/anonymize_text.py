@@ -32,6 +32,8 @@ def anonymize_text(ax: AxiomContext, input: AnonymizeTextRequest) -> AnonymizeTe
         )
     except _pii.PiiError as e:
         return AnonymizeTextResponse(error=str(e))
+    except Exception as e:  # noqa: BLE001 — never crash on malformed input
+        return AnonymizeTextResponse(error=f"anonymize failed: {e}")
 
     return AnonymizeTextResponse(
         anonymized_text=anonymized_text,

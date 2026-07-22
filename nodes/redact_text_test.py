@@ -43,3 +43,21 @@ def test_redact_out_of_bounds_span_is_structured_error_not_crash():
     entity = PiiEntity(entity_type="EMAIL_ADDRESS", start=0, end=999, text="x", score=0.5)
     r = redact_text(ax, RedactTextRequest(text="short", entities=[entity]))
     assert r.error
+
+
+def test_explicit_zero_score_is_respected_not_silently_promoted():
+    """Regression: a caller-supplied score=0.0 must NOT be treated as if it
+    were the max score. Two different-type entities cover the SAME span; the
+    one explicitly scored 0.0 must lose the overlap to the higher-scored one.
+    """
+    ax = FakeAxiomContext()
+    text = "See example.com for details."
+    span = "example.com"
+    start = text.index(span)
+    end = start + len(span)
+    low = PiiEntity(entity_type="EMAIL_ADDRESS", start=start, end=end, text=span, score=0.0)
+    high = PiiEntity(entity_type="URL", start=start, end=end, text=span, score=0.5)
+    r = redact_text(ax, RedactTextRequest(text=text, entities=[low, high]))
+    assert not r.error
+    assert r.redacted_text == "See <URL> for details."
+    assert "<EMAIL_ADDRESS>" not in r.redacted_text
