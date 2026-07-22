@@ -1,0 +1,13 @@
+# Axiom build artifacts
+.axiom/
+
+# Generated proto bindings — pb2 files are committed
+gen/__pycache__/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/

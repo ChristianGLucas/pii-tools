@@ -1,0 +1,254 @@
+// This file defines the data contracts (messages) for your Axiom package.
+// Every node's --input and --output refers to a message defined here.
+//
+// Run `axiom create message <Name>` to scaffold a new message below.
+// Run `axiom generate` to compile these definitions into language bindings in gen/.
+//
+// DOCUMENTATION
+//   Comments written directly above a message or field declaration are extracted
+//   automatically at publish time and shown in the Axiom registry as documentation.
+//   Write your descriptions there — no separate doc files needed.
+//
+//   Leading comment  (no blank line before the declaration) → registry description ✓
+//   Detached comment (blank line before the declaration)    → ignored by registry  ✗
+//
+// This file is yours to edit. Axiom only appends new message blocks — it never
+// overwrites or removes content you have written.
+
+syntax = "proto3";
+
+package christiangeorgelucas.pii_tools;
+
+// One detected (or caller-supplied) span of personally identifiable information
+// within a text. `start`/`end` are Python-string-index offsets into the
+// ORIGINAL text, half-open [start, end). `text` is the raw matched substring
+// — present so downstream anonymization nodes don't need to re-slice the
+// original text themselves, but treat it as sensitive.
+message PiiEntity {
+  // Entity type, e.g. "EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD", "US_SSN".
+  // See ListSupportedEntities for the full catalog.
+  string entity_type = 1;
+  // Start offset (inclusive) into the text this entity was found in.
+  int32 start = 2;
+  // End offset (exclusive) into the text this entity was found in.
+  int32 end = 3;
+  // The raw matched substring, text[start:end].
+  string text = 4;
+  // Confidence score in [0.0, 1.0]. Pattern-only matches score lower;
+  // a passing checksum/validator (e.g. Luhn, IBAN mod-97) raises it.
+  double score = 5;
+  // Name of the recognizer that produced this entity, e.g. "CreditCardRecognizer".
+  string recognizer_name = 6;
+}
+
+// Scan free text for PII entities.
+message DetectPiiRequest {
+  // The text to scan.
+  string text = 1;
+  // Restrict detection to these entity types (see ListSupportedEntities for
+  // valid values). Empty means "all supported entity types".
+  repeated string entity_types = 2;
+  // Two-letter language hint (currently only "en" recognizers are wired up;
+  // reserved for future locale-specific recognizers). Defaults to "en".
+  string language = 3;
+}
+
+// The PII entities found in the scanned text, in order of appearance.
+// Overlapping matches of the SAME entity type are merged into one span;
+// overlapping matches of DIFFERENT types keep only the higher-scored one
+// (e.g. an EMAIL_ADDRESS match wins over a URL match nested inside it).
+message DetectPiiResponse {
+  repeated PiiEntity entities = 1;
+  // Structured error message; empty on success. Set instead of raising on
+  // malformed input (e.g. text over the length limit, an unknown entity type).
+  string error = 2;
+  // Echoes the input `text` unchanged — lets a flow wire DetectPii straight
+  // into RedactText/MaskText/HashText/ReplaceText through a single edge
+  // (both `text` and `entities`) without a second source for the original text.
+  string text = 3;
+}
+
+// Replace each given entity span with a generic per-type placeholder token,
+// e.g. "<EMAIL_ADDRESS>". Irreversible; the entity's original text is discarded.
+message RedactTextRequest {
+  // The original text the entities were found in.
+  string text = 1;
+  // Entity spans to redact (typically from a prior DetectPii call). Spans
+  // must refer to offsets in `text`. Overlapping spans of the SAME entity
+  // type are merged into one span; overlapping spans of DIFFERENT types
+  // keep only the higher-scored one.
+  repeated PiiEntity entities = 2;
+}
+
+message RedactTextResponse {
+  // `text` with every entity span replaced by "<ENTITY_TYPE>".
+  string redacted_text = 1;
+  // Number of entity spans actually redacted (after overlap resolution).
+  int32 items_redacted = 2;
+  string error = 3;
+}
+
+// Partially obscure each entity span in place, e.g. "4111111111111111" ->
+// "************1111" — keeps a caller-chosen number of characters visible so
+// the redacted text stays useful for display/matching while hiding the value.
+message MaskTextRequest {
+  string text = 1;
+  repeated PiiEntity entities = 2;
+  // How many characters of each entity to REPLACE with masking_char. 0 or
+  // unset (default) masks the entire span. A value larger than an entity's
+  // length masks that whole entity (never errors).
+  int32 chars_to_mask = 3;
+  // Single character used to replace masked characters. Defaults to "*".
+  string masking_char = 4;
+  // false (default): mask the FIRST `chars_to_mask` characters, leaving the
+  // tail visible (e.g. chars_to_mask=12, from_end=false on a 16-digit card
+  // number masks all but the last 4 digits: "************1111").
+  // true: mask the LAST `chars_to_mask` characters instead, leaving the
+  // head visible.
+  bool from_end = 5;
+}
+
+message MaskTextResponse {
+  string masked_text = 1;
+  int32 items_masked = 2;
+  string error = 3;
+}
+
+// Replace each entity span with a one-way SHA-256/512 hash digest of its
+// original value (hex-encoded) — irreversible pseudonymization.
+//
+// By default each entity is salted with a fresh random salt per call, so the
+// SAME input value hashes DIFFERENTLY every call (safer against dictionary/
+// correlation attacks, but not linkable across calls or entities). Pass
+// `salt` explicitly to get deterministic, linkable hashing instead — the
+// same text + same salt always produces the same digest.
+message HashTextRequest {
+  string text = 1;
+  repeated PiiEntity entities = 2;
+  // "sha256" (default) or "sha512".
+  string hash_algorithm = 3;
+  // Optional. UTF-8 string, must be at least 16 bytes once encoded. Supply
+  // the same salt across calls to make equal values hash identically;
+  // omit for a fresh random salt per entity (default, non-deterministic).
+  string salt = 4;
+}
+
+message HashTextResponse {
+  string hashed_text = 1;
+  int32 items_hashed = 2;
+  string error = 3;
+}
+
+// Replace each entity span with a REVERSIBLE AES ciphertext, so the original
+// value can be recovered later with DecryptText and the same key. Use this
+// (not Hash) when the original PII must be recoverable by an authorized
+// caller downstream.
+message EncryptTextRequest {
+  string text = 1;
+  repeated PiiEntity entities = 2;
+  // Symmetric key, UTF-8 encoded. Must be exactly 16, 24, or 32 bytes long
+  // (AES-128/192/256). The caller owns key generation and storage — this
+  // node never persists it.
+  string encryption_key = 3;
+}
+
+message EncryptTextResponse {
+  string encrypted_text = 1;
+  // Spans of `encrypted_text` occupied by each ciphertext, entity_type
+  // preserved from the input — pass these (and the same key) to DecryptText
+  // to recover the original values later.
+  repeated PiiEntity encrypted_entities = 2;
+  int32 items_encrypted = 3;
+  string error = 4;
+}
+
+// Reverse a prior EncryptText call: recover the original plaintext for each
+// encrypted span, given the same key.
+message DecryptTextRequest {
+  string encrypted_text = 1;
+  // The `encrypted_entities` returned by the matching EncryptText call.
+  repeated PiiEntity encrypted_entities = 2;
+  // Must match the key used to encrypt, exactly.
+  string encryption_key = 3;
+}
+
+message DecryptTextResponse {
+  string decrypted_text = 1;
+  string error = 2;
+}
+
+// Replace each entity span with a caller-supplied substitute value, e.g.
+// swap every EMAIL_ADDRESS for "[email withheld]" while leaving other
+// entity types untouched (or substituting a default).
+message ReplaceTextRequest {
+  string text = 1;
+  repeated PiiEntity entities = 2;
+  // entity_type -> replacement text, e.g. {"EMAIL_ADDRESS": "[withheld]"}.
+  map<string, string> replacements = 3;
+  // Used for any entity whose type has no entry in `replacements`.
+  // Defaults to "[REDACTED]".
+  string default_replacement = 4;
+}
+
+message ReplaceTextResponse {
+  string replaced_text = 1;
+  int32 items_replaced = 2;
+  string error = 3;
+}
+
+// Convenience one-call op: detect PII in `text`, then immediately apply a
+// single chosen anonymization operator to every entity found. Equivalent to
+// DetectPii followed by the matching operator node, without a round trip —
+// use the standalone Detect + operator nodes instead when you need to
+// inspect or filter entities before anonymizing.
+message AnonymizeTextRequest {
+  string text = 1;
+  // Restrict detection to these entity types. Empty means "all".
+  repeated string entity_types = 2;
+  // Which operator to apply: "redact" (default), "mask", "hash", or
+  // "replace". ("encrypt"/"decrypt" need explicit key handling — use the
+  // dedicated EncryptText/DecryptText nodes for those.)
+  string operator = 3;
+  // Passed through to the "mask" operator; ignored otherwise. See
+  // MaskTextRequest for the exact chars_to_mask/from_end semantics.
+  int32 chars_to_mask = 4;
+  string masking_char = 5;
+  bool from_end = 6;
+  // Passed through to the "hash" operator; ignored otherwise. See
+  // HashTextRequest for the salt/determinism tradeoff.
+  string hash_algorithm = 7;
+  string salt = 10;
+  // Passed through to the "replace" operator; ignored otherwise.
+  map<string, string> replacements = 8;
+  string default_replacement = 9;
+}
+
+message AnonymizeTextResponse {
+  string anonymized_text = 1;
+  // The entities that were found and anonymized (offsets refer to the
+  // ORIGINAL `text`, not `anonymized_text`).
+  repeated PiiEntity entities = 2;
+  string error = 3;
+}
+
+// One entity type this package can detect, with a human-readable description
+// and a realistic example of matching text.
+message SupportedEntity {
+  string entity_type = 1;
+  string description = 2;
+  // "generic" (country-agnostic) or "us" (United States specific).
+  string category = 3;
+  string example = 4;
+}
+
+// List every PII entity type this package's DetectPii can recognize.
+message ListSupportedEntitiesRequest {
+  // Restrict the listing to one category ("generic" or "us"). Empty
+  // (default) lists every category.
+  string category = 1;
+}
+
+message ListSupportedEntitiesResponse {
+  repeated SupportedEntity entities = 1;
+  string error = 2;
+}

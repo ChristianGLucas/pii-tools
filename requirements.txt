@@ -1,0 +1,28 @@
+# Pinned for determinism. Full license audit of this closure — every entry
+# verified from the distribution's own LICENSE/METADATA text, not registry
+# metadata alone (see the retrospective for the full audit, including why
+# Microsoft Presidio's own `presidio-analyzer` package is NOT installed here
+# — see vendor/presidio_patterns/NOTICE.md):
+#
+#   presidio-anonymizer  MIT            (Microsoft) — anonymization operators
+#                                        (redact/replace/mask/hash/encrypt/decrypt).
+#                                        Its ONLY dependency is `cryptography`.
+#   phonenumbers         Apache-2.0     (Google) — the phone-number recognizer's
+#                                        backing library. Zero further dependencies.
+#   regex                Apache-2.0 AND CNRI-Python — used by the vendored
+#                                        pattern-recognizer engine (vendor/presidio_patterns).
+#   cryptography         Apache-2.0 OR BSD-3-Clause (dual, both permissive)
+#   cffi                 MIT-0          (pulled by cryptography)
+#   pycparser            BSD-3-Clause   (pulled by cffi)
+#
+# Deliberately NOT installed: `presidio-analyzer` itself (mandatorily pulls in
+# spacy + tldextract, both of which drag in `requests` -> `certifi`, MPL-2.0 —
+# copyleft, rejected by this project's license gate). `python-stdnum`
+# (LGPL-2.1-or-later) was evaluated (via `scrubadub`, which depends on it
+# directly) and rejected for the same reason.
+presidio-anonymizer==2.2.364
+phonenumbers==9.0.34
+regex==2026.7.19
+cryptography==48.0.1
+cffi==2.1.0
+pycparser==3.0

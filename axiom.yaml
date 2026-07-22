@@ -1,0 +1,41 @@
+name: christiangeorgelucas/pii-tools
+version: 0.1.0
+language: python
+description: Composable Axiom PII (personally identifiable information) detection and text-anonymization nodes over a single PiiEntity envelope. Detection wraps a vendored, license-audited subset of Microsoft Presidio's (MIT) regex/checksum pattern-recognition engine plus Google's phonenumbers (Apache-2.0) — covering emails, phone numbers, credit cards, crypto wallet addresses, IBANs, IP/MAC addresses, URLs, dates, and US-specific identifiers (SSN, ITIN, passport, driver's license, bank account, ABA routing number, medical license, NPI, MBI). Anonymization (redact/mask/hash/encrypt/decrypt/replace) wraps the real presidio-anonymizer package (MIT). Offline, deterministic, no external service calls. Does not detect free-text person names, locations, or organizations — that requires an NLP/NER model, deliberately not bundled (see the README for why).
+nodes:
+    - name: DetectPii
+      description: Scan free text for personally identifiable information — emails, phone numbers, credit card numbers, crypto wallet addresses, IBANs, IP/MAC addresses, URLs, dates, and several US-specific identifiers (SSN, ITIN, passport, driver's license, bank account, ABA routing number, medical license, NPI, MBI). Restrict to specific types with entity_types (see ListSupportedEntities), or leave empty to scan for everything supported. Returns each match's type, offsets into the input text, matched text, confidence score, and which recognizer found it, plus the input text echoed back (so a flow can wire DetectPii straight into RedactText/MaskText/HashText/ReplaceText through a single edge). Overlapping matches of the same type are merged; overlapping matches of different types keep only the higher-scored one. Malformed input (missing text, text over the 200,000-char limit, or an unrecognized entity_types value) returns a structured error rather than crashing. Does not detect free-text person names, locations, or organizations — those require an NLP/NER model, which this package deliberately does not bundle.
+      input: DetectPiiRequest
+      output: DetectPiiResponse
+    - name: RedactText
+      description: Replace every given entity span in text with a generic per-type placeholder token, e.g. "My email is jane@example.com" -> "My email is <EMAIL_ADDRESS>". Irreversible — the original values are discarded, not recoverable. Pass entities from a prior DetectPii call (or your own spans in the same PiiEntity shape). Malformed input (missing text, an empty entities list, or an out-of-bounds span) returns a structured error rather than crashing.
+      input: RedactTextRequest
+      output: RedactTextResponse
+    - name: MaskText
+      description: Partially obscure every given entity span in place, revealing only a caller-chosen number of characters — e.g. mask a 16-digit card number down to "************1111" (chars_to_mask=12, from_end=false) so the text stays useful for display while hiding the sensitive value. Pass entities from a prior DetectPii call. chars_to_mask=0 (the default) masks the entire span. Malformed input (missing text, an empty entities list, a masking_char that isn't exactly one character, or an out-of-bounds span) returns a structured error rather than crashing.
+      input: MaskTextRequest
+      output: MaskTextResponse
+    - name: HashText
+      description: Replace every given entity span with a one-way SHA-256/512 hash digest (hex-encoded) of its original value — irreversible pseudonymization. By default each entity gets a fresh random salt per call, so the SAME value hashes DIFFERENTLY every call (safer against dictionary attacks, but not linkable across calls); pass salt (at least 16 bytes once UTF-8 encoded) for deterministic, linkable hashing instead. Pass entities from a prior DetectPii call. Malformed input (missing text, an empty entities list, an unsupported hash_algorithm, a too-short salt, or an out-of-bounds span) returns a structured error rather than crashing.
+      input: HashTextRequest
+      output: HashTextResponse
+    - name: EncryptText
+      description: Replace every given entity span with a REVERSIBLE AES-CBC ciphertext (base64-encoded, random IV per value), so the original value can be recovered later with DecryptText and the same key — use this instead of HashText when the PII must be recoverable by an authorized caller downstream. encryption_key must be exactly 16, 24, or 32 bytes once UTF-8 encoded (AES-128/192/256); the caller owns key generation and storage, this node never persists it. Returns encrypted_entities — the ciphertext spans' positions in the output text — pass those (and the same key) to DecryptText. Malformed input (missing text, an empty entities list, a wrong-length key, or an out-of-bounds span) returns a structured error rather than crashing.
+      input: EncryptTextRequest
+      output: EncryptTextResponse
+    - name: DecryptText
+      description: Reverse a prior EncryptText call — recover the original plaintext for each encrypted span in encrypted_text, given the matching encrypted_entities (as returned by EncryptText) and the SAME encryption_key used to encrypt. A wrong key or corrupted ciphertext fails decryption cleanly. Malformed input (missing encrypted_text, empty encrypted_entities, a wrong-length key, an out-of-bounds span, or a key/ciphertext mismatch) returns a structured error rather than crashing.
+      input: DecryptTextRequest
+      output: DecryptTextResponse
+    - name: ReplaceText
+      description: Replace every given entity span with a caller-supplied substitute value, e.g. swap every EMAIL_ADDRESS for "[email withheld]" via replacements while every other entity type falls back to default_replacement (defaults to "[REDACTED]"). Pass entities from a prior DetectPii call. Malformed input (missing text, an empty entities list, or an out-of-bounds span) returns a structured error rather than crashing.
+      input: ReplaceTextRequest
+      output: ReplaceTextResponse
+    - name: AnonymizeText
+      description: Convenience one-call op — detect PII in text, then immediately apply a single chosen anonymization operator to every entity found, equivalent to DetectPii followed by the matching operator node (RedactText/MaskText/HashText/ReplaceText) without a round trip. operator defaults to "redact"; use "mask", "hash", or "replace" for the others ("encrypt"/"decrypt" need explicit key handling — use the dedicated EncryptText/DecryptText nodes for those). Use the standalone Detect + operator nodes instead when you need to inspect or filter entities before anonymizing. Malformed input (missing text, text over the length limit, an unrecognized entity_types value, or an unsupported operator) returns a structured error rather than crashing.
+      input: AnonymizeTextRequest
+      output: AnonymizeTextResponse
+    - name: ListSupportedEntities
+      description: List every PII entity type DetectPii (and AnonymizeText) can recognize, each with a human-readable description and a realistic example of matching text. Filter to one category ("generic" or "us") with category, or leave it empty to list everything. An unrecognized category returns a structured error rather than crashing.
+      input: ListSupportedEntitiesRequest
+      output: ListSupportedEntitiesResponse
