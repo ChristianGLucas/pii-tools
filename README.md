@@ -1,6 +1,6 @@
 # pii-tools
 
-Composable [Axiom](https://axiom.dev) nodes for detecting and anonymizing
+Composable [Axiom](https://axiomide.com) nodes for detecting and anonymizing
 personally identifiable information (PII) in free text. Built for the Axiom
 marketplace, published under the `christiangeorgelucas` handle.
 
