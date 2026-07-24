@@ -1,5 +1,5 @@
 name: christiangeorgelucas/pii-tools
-version: 0.1.0
+version: 0.1.1
 language: python
 description: Composable Axiom PII (personally identifiable information) detection and text-anonymization nodes over a single PiiEntity envelope. Detection wraps a vendored, license-audited subset of Microsoft Presidio's (MIT) regex/checksum pattern-recognition engine plus Google's phonenumbers (Apache-2.0) — covering emails, phone numbers, credit cards, crypto wallet addresses, IBANs, IP/MAC addresses, URLs, dates, and US-specific identifiers (SSN, ITIN, passport, driver's license, bank account, ABA routing number, medical license, NPI, MBI). Anonymization (redact/mask/hash/encrypt/decrypt/replace) wraps the real presidio-anonymizer package (MIT). Offline, deterministic, no external service calls. Does not detect free-text person names, locations, or organizations — that requires an NLP/NER model, deliberately not bundled (see the README for why).
 nodes:

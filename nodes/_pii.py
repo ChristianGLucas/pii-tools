@@ -27,10 +27,6 @@ from presidio_anonymizer.entities import (  # noqa: E402
 )
 from presidio_anonymizer.entities import RecognizerResult as AnonRecognizerResult  # noqa: E402
 
-# Input -> cost bound: caps regex work and the size of every response, applied
-# to the RAW input before any recognizer runs.
-MAX_TEXT_CHARS = 200_000
-
 _anon_engine = AnonymizerEngine()
 _deanon_engine = DeanonymizeEngine()
 
@@ -50,10 +46,6 @@ class PiiError(Exception):
 def _check_text(text, field_name="text"):
     if text is None:
         raise PiiError(f"{field_name} is required")
-    if len(text) > MAX_TEXT_CHARS:
-        raise PiiError(
-            f"{field_name} is {len(text)} chars, over the {MAX_TEXT_CHARS}-char limit"
-        )
 
 
 def _resolve_entity_types(entity_types):
