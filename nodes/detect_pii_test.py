@@ -90,9 +90,11 @@ def test_unknown_entity_type_is_structured_error():
     assert "NOT_A_REAL_TYPE" in r.error
 
 
-def test_oversized_text_is_structured_error_not_crash():
+def test_large_text_does_not_crash():
+    # Size limits are the platform's job, not this node's; a large input
+    # must still come back as a structured (successful) result, never a
+    # crash.
     ax = FakeAxiomContext()
-    huge = "a" * 200_001
+    huge = "a" * 500_000
     r = detect_pii(ax, DetectPiiRequest(text=huge))
-    assert r.error
-    assert "200,000" in r.error or "200000" in r.error
+    assert r.error == ""
