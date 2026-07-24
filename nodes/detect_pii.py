@@ -14,9 +14,9 @@ def detect_pii(ax: AxiomContext, input: DetectPiiRequest) -> DetectPiiResponse:
     Returns each match's type, offsets into the input text, matched text,
     confidence score, and which recognizer found it. Overlapping matches of
     the same type are merged; overlapping matches of different types keep
-    only the higher-scored one. Malformed input (missing text, text over the
-    200,000-char limit, or an unrecognized entity_types value) returns a
-    structured error rather than crashing. Does not detect free-text person
+    only the higher-scored one. Malformed input (missing text, or an
+    unrecognized entity_types value) returns a structured error rather than
+    crashing. Does not detect free-text person
     names, locations, or organizations — those require an NLP/NER model,
     which this package deliberately does not bundle (see the README).
     """
